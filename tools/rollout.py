@@ -10,7 +10,7 @@ in the firmware repo).
   tools/rollout.py --hw2 block 1.2.0      # devices on 1.2.0 install the manifest version
   tools/rollout.py --hw2 unblock 1.2.0
 
-Add --push to commit and push the change. Raw GitHub caches for ~5 minutes.
+Add --push (anywhere) to commit and push the change. Raw GitHub caches for ~5 minutes.
 """
 import argparse
 import hashlib
@@ -73,8 +73,11 @@ def main():
     hw = ap.add_mutually_exclusive_group(required=True)
     hw.add_argument("--hw1", action="store_const", dest="hw", const="hw1")
     hw.add_argument("--hw2", action="store_const", dest="hw", const="hw2")
-    ap.add_argument("--push", action="store_true", help="commit and push the manifest")
+    push = argparse.ArgumentParser(add_help=False)
+    push.add_argument("--push", action="store_true", help="commit and push the manifest")
     sub = ap.add_subparsers(dest="cmd", required=True)
+    _add_parser = sub.add_parser
+    sub.add_parser = lambda *a, **k: _add_parser(*a, parents=[push], **k)
 
     sub.add_parser("show")
     rel = sub.add_parser("release", help="point at a new build and restart at 0%% (canaries only)")
@@ -93,6 +96,7 @@ def main():
     args = ap.parse_args()
 
     path = MANIFESTS[args.hw]
+    before = path.read_text()
     m = load(path)
 
     if args.cmd == "show":
@@ -129,6 +133,9 @@ def main():
     save(path, m)
     show(m)
 
+    if path.read_text() == before:
+        print("\nNo change; nothing to commit.")
+        return
     if args.push:
         rel_path = str(path.relative_to(REPO))
         subprocess.run(["git", "-C", str(REPO), "add", rel_path], check=True)
