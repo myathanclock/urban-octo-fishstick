@@ -4,6 +4,8 @@
   "size": 1990800,
   "sha256": "df0117352942dc5b9169ccebe0b3c330b3750e7745f4cddd3806f1a2e93be47d",
   "rollout_percent": 100,
-  "canary_devices": [],
+  "canary_devices": [
+    "9C139EAB59A0"
+  ],
   "blocked_versions": []
 }

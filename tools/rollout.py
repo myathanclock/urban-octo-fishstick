@@ -2,6 +2,10 @@
 """Edit the staged-rollout manifests in manifests/v2/ (see docs/ota-staged-rollout.md
 in the firmware repo).
 
+Canaries are maintained in tools/canaries/hw1.txt and hw2.txt (one MAC per line).
+rollout.py copies that list into the manifest as canary_devices so clocks can
+read it; do not edit canary_devices in the JSON by hand.
+
   tools/rollout.py --hw2 show
   tools/rollout.py --hw2 release 1.2.0 firmware-v1.2.0-v2.bin.enc <asset-url>   # canaries only
   tools/rollout.py --hw2 percent 5
@@ -22,9 +26,15 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 MANIFESTS = {"hw1": REPO / "manifests/v2/stable.json", "hw2": REPO / "manifests/v2/stable-hw2.json"}
+CANARIES = {"hw1": REPO / "tools/canaries/hw1.txt", "hw2": REPO / "tools/canaries/hw2.txt"}
 KEY_ORDER = ["version", "url", "size", "sha256", "rollout_percent", "canary_devices", "blocked_versions"]
 VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
 MAC_RE = re.compile(r"^[0-9A-F]{12}$")
+CANARY_HEADER = """\
+# OTA canaries for {hw}. One compact MAC (12 hex chars) per line.
+# Source of truth. rollout.py copies this into {manifest}
+# as canary_devices (firmware still reads the JSON).
+"""
 
 
 def fail(msg):
@@ -58,12 +68,38 @@ def mac(s):
     return s
 
 
-def show(m):
+def load_canaries(hw):
+    path = CANARIES[hw]
+    devices = []
+    if path.exists():
+        for line in path.read_text().splitlines():
+            line = line.split("#", 1)[0].strip()
+            if not line:
+                continue
+            devices.append(mac(line))
+    return sorted(set(devices))
+
+
+def save_canaries(hw, devices):
+    path = CANARIES[hw]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    rel_manifest = MANIFESTS[hw].relative_to(REPO)
+    body = CANARY_HEADER.format(hw=hw, manifest=rel_manifest)
+    ids = sorted(set(devices))
+    if ids:
+        body += "\n" + "\n".join(ids) + "\n"
+    else:
+        body += "\n"
+    path.write_text(body)
+
+
+def show(m, canary_path):
     print(json.dumps(m, indent=2))
     who = f"{m['rollout_percent']}% of devices"
     if m["canary_devices"]:
         who += f" + {len(m['canary_devices'])} canaries"
     print(f"\n{m['version']} goes to {who}.")
+    print(f"Canary list: {canary_path.relative_to(REPO)}")
     if m["blocked_versions"]:
         print(f"Devices on {', '.join(m['blocked_versions'])} install {m['version']} regardless.")
 
@@ -96,11 +132,23 @@ def main():
     args = ap.parse_args()
 
     path = MANIFESTS[args.hw]
-    before = path.read_text()
+    canary_path = CANARIES[args.hw]
+    before = {path: path.read_text(), canary_path: canary_path.read_text() if canary_path.exists() else ""}
     m = load(path)
 
+    if args.cmd == "canary":
+        devices = set(load_canaries(args.hw))
+        (devices.add if args.action == "add" else devices.discard)(args.device)
+        save_canaries(args.hw, devices)
+        message = f"{args.hw}: canary {args.action} {args.device}"
+
+    m["canary_devices"] = load_canaries(args.hw)
+
     if args.cmd == "show":
-        show(m)
+        show(m, canary_path)
+        if m["canary_devices"] != load(path).get("canary_devices", []):
+            print("\nNote: canary list file differs from the published JSON; "
+                  "run canary add/remove (or any write command) to copy it into the manifest.")
         return
     if args.cmd == "release":
         if not args.bin.is_file():
@@ -116,29 +164,25 @@ def main():
             fail("percent must be 0-100")
         m["rollout_percent"] = args.value
         message = f"{args.hw}: roll out {m['version']} to {args.value}%"
-    elif args.cmd == "canary":
-        devices = set(m["canary_devices"])
-        (devices.add if args.action == "add" else devices.discard)(args.device)
-        m["canary_devices"] = sorted(devices)
-        message = f"{args.hw}: canary {args.action} {args.device}"
     elif args.cmd == "block":
         if args.version == m["version"]:
             fail("can't block the version the manifest points at; release a good build first")
         m["blocked_versions"] = sorted(set(m["blocked_versions"]) | {args.version})
         message = f"{args.hw}: block {args.version}"
-    else:
+    elif args.cmd == "unblock":
         m["blocked_versions"] = [v for v in m["blocked_versions"] if v != args.version]
         message = f"{args.hw}: unblock {args.version}"
 
     save(path, m)
-    show(m)
+    show(m, canary_path)
 
-    if path.read_text() == before:
+    changed = [p for p, old in before.items() if (p.read_text() if p.exists() else "") != old]
+    if not changed:
         print("\nNo change; nothing to commit.")
         return
     if args.push:
-        rel_path = str(path.relative_to(REPO))
-        subprocess.run(["git", "-C", str(REPO), "add", rel_path], check=True)
+        rels = [str(p.relative_to(REPO)) for p in changed]
+        subprocess.run(["git", "-C", str(REPO), "add", *rels], check=True)
         subprocess.run(["git", "-C", str(REPO), "commit", "-m", message], check=True)
         subprocess.run(["git", "-C", str(REPO), "push"], check=True)
 
