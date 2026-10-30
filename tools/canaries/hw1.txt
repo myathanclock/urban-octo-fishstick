@@ -1,3 +1,6 @@
-# OTA canaries for HW1. One compact MAC (12 hex chars) per line.
+# OTA canaries for hw1. One compact MAC (12 hex chars) per line.
 # Source of truth. rollout.py copies this into manifests/v2/stable.json
 # as canary_devices (firmware still reads the JSON).
+
+DCB4D900C184
+D0CF132C4CA4
