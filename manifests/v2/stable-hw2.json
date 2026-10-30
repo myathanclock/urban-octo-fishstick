@@ -1,10 +1,12 @@
 {
-  "version": "1.2.0",
-  "url": "https://github.com/myathanclock/urban-octo-fishstick/releases/download/v1.2.0-v2/firmware-v1.2.0-v2.bin.enc",
-  "size": 1805152,
-  "sha256": "d60238b6a93f4a78837f7a9dc6d258e4a4f0de447bf756c29f2381f9d03b1558",
+  "version": "1.2.1",
+  "url": "https://github.com/myathanclock/urban-octo-fishstick/releases/download/v1.2.1-v2/firmware-v1.2.1-v2.bin.enc",
+  "size": 1805840,
+  "sha256": "cc4d9afb32647ffacc5d2e4a3b3cf914c929c52b990f237577eac8e38e420e53",
   "rollout_percent": 0,
   "canary_devices": [
+    "14C19F44D1D4",
+    "44B176B58D6C",
     "9C139EAB59A0"
   ],
   "blocked_versions": []

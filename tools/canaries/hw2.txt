@@ -2,4 +2,6 @@
 # Source of truth. rollout.py copies this into manifests/v2/stable-hw2.json
 # as canary_devices (firmware still reads the JSON).
 
+14C19F44D1D4
 9C139EAB59A0
+44B176B58D6C
